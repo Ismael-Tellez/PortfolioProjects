@@ -1,0 +1,145 @@
+/*
+Covid 19 Data Exploration 
+Skills used: Joins, CTE's, Creating Tables, Windows Functions, Aggregate Functions, Creating Views, Converting Data Types.
+*/
+
+Select *
+From `radiant-anchor-360514.Covid_dataset.covid_deaths`
+Where continent IS NOT NULL
+order by Location, date;
+
+
+
+# Selecting the Data that we are going to be starting with
+SELECT  Location, date, total_cases, new_cases, total_deaths, population
+FROM `radiant-anchor-360514.Covid_dataset.covid_deaths`
+WHERE continent IS NOT NULL
+ /*Is Not Null because the rows that = NULL are the continents */
+ORDER BY Location, date;
+
+
+
+# Looking at Total Cases VS Total Deaths
+# Shows likelihood of dying if you contract COVID-19 within the United States
+SELECT  Location, date, total_cases, total_deaths, (total_deaths/total_cases)*100 AS DeathPercentage 
+FROM `radiant-anchor-360514.Covid_dataset.covid_deaths`
+WHERE location = 'United States' AND continent IS NOT NULL
+ORDER BY Location, date DESC LIMIT 1;
+
+
+# Looking at Total Cases VS Population
+# Shows percentage of population that got COVID-19
+SELECT  Location, date, Population, total_cases, (total_cases/Population*100) AS percentage_of_population_infected
+FROM `radiant-anchor-360514.Covid_dataset.covid_deaths`
+WHERE location LIKE '%States%' AND continent IS NOT NULL
+ORDER BY Location, date DESC LIMIT 1;
+
+
+
+# Looking at Countries with Highest Infection Rate compared to Population
+SELECT Location, population, MAX(total_cases) AS HighestInfectionCount, MAX((total_cases/Population))*100 AS percentage_of_population_infected
+FROM `radiant-anchor-360514.Covid_dataset.covid_deaths`
+WHERE continent IS NOT NULL
+GROUP BY population, location
+ORDER BY 4 desc;
+
+
+
+# Showing countries with highest death count per Population
+SELECT Location, MAX(total_deaths) AS TotalDeathCount
+FROM `radiant-anchor-360514.Covid_dataset.covid_deaths`
+WHERE continent IS NOT NULL
+GROUP BY location
+ORDER BY 2 desc;
+
+
+
+# Breaking it down by Continent
+
+-- Showing contintents with the highest death count per population
+
+SELECT continent, MAX(total_deaths) AS TotalDeathCount
+FROM `radiant-anchor-360514.Covid_dataset.covid_deaths`
+WHERE continent IS NOT NULL
+GROUP BY continent
+ORDER BY 2 desc;
+
+
+
+#Global Numbers:
+-- By Date
+SELECT date, SUM(new_cases) AS TotalCases, SUM(new_deaths) AS TotalDeaths, SUM(new_deaths)/SUM(New_Cases)*100 AS DeathPercentage
+FROM `radiant-anchor-360514.Covid_dataset.covid_deaths`
+WHERE continent IS NOT NULL
+GROUP BY date
+ORDER BY 1,2;
+
+--Overall
+SELECT SUM(new_cases) AS TotalCases, SUM(new_deaths) AS TotalDeaths, SUM(new_deaths)/SUM(New_Cases)*100 AS DeathPercentage
+FROM `radiant-anchor-360514.Covid_dataset.covid_deaths`
+WHERE continent IS NOT NULL
+ORDER BY 1,2;
+
+
+
+# Looking at Total population VS Vaccinations
+-- Shows Percentage of Population that has recieved at least one Covid-19 Vaccine
+
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations, SUM(vac.new_vaccinations) OVER (Partition by dea.location ORDER BY dea.location, dea.date) AS RollingPeopleVaccinated
+FROM `radiant-anchor-360514.Covid_dataset.covid_deaths` AS dea
+INNER JOIN `radiant-anchor-360514.Covid_dataset.covid_vaccinations` AS vac
+    ON dea.location = vac.location
+    AND dea.date = vac.date
+ WHERE dea.continent IS NOT NULL  
+ORDER BY 2,3;
+
+
+
+# USE CTE (common table expression) to perform Calculation on Partition By in the previous query
+With PopvsVac_cte AS (
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations, SUM(vac.new_vaccinations) OVER (Partition by dea.location ORDER BY dea.location, dea.date) AS RollingPeopleVaccinated
+FROM `radiant-anchor-360514.Covid_dataset.covid_deaths` AS dea
+INNER JOIN `radiant-anchor-360514.Covid_dataset.covid_vaccinations` AS vac
+    ON dea.location = vac.location
+    AND dea.date = vac.date
+ WHERE dea.continent IS NOT NULL)
+
+SELECT *, (RollingPeopleVaccinated/Population)*100 AS PercentofPopulationVaccinated
+FROM PopvsVac_cte;
+
+
+
+# Creating Table to perform Calculation on Partition By in previous query
+DROP TABLE IF EXISTS radiant-anchor-360514.Covid_dataset.PercentPopulationVaccinated;
+
+CREATE TABLE radiant-anchor-360514.Covid_dataset.PercentPopulationVaccinated
+(continent string(255),
+ location string(255),
+ date datetime,
+ population numeric,
+ new_vaccinations numeric,
+ RollingPeopleVaccinated numeric)
+AS
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations, SUM(vac.new_vaccinations) OVER (Partition by dea.location ORDER BY dea.location, dea.date) AS RollingPeopleVaccinated
+FROM `radiant-anchor-360514.Covid_dataset.covid_deaths` AS dea
+INNER JOIN `radiant-anchor-360514.Covid_dataset.covid_vaccinations` AS vac
+    ON dea.location = vac.location
+    AND dea.date = vac.date
+ WHERE dea.continent IS NOT NULL;
+
+
+--Querying the table created above
+ SELECT *, (RollingPeopleVaccinated/Population)*100 AS PercentofPopulationVaccinated
+ FROM radiant-anchor-360514.Covid_dataset.PercentPopulationVaccinated
+ ORDER BY 2,3;
+
+
+
+# Creating View to store data for visualizations
+CREATE VIEW radiant-anchor-360514.Covid_dataset.PercentPopulationVaccinated2 AS
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations, SUM(vac.new_vaccinations) OVER (Partition by dea.location ORDER BY dea.location, dea.date) AS RollingPeopleVaccinated
+FROM `radiant-anchor-360514.Covid_dataset.covid_deaths` AS dea
+INNER JOIN `radiant-anchor-360514.Covid_dataset.covid_vaccinations` AS vac
+    ON dea.location = vac.location
+    AND dea.date = vac.date
+ WHERE dea.continent IS NOT NULL;
